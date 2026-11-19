@@ -62,6 +62,8 @@ public class SistemaMonitoramento {
             System.out.println("2 - Rodar previsões");
             System.out.println("3 - Gerenciar dados do território");
             System.out.println("4 - Simular próximas leituras");
+            System.out.println("5 - Exibir status completo");
+            System.out.println("6 - Simulação de 24 horas");
             System.out.println("7 - Ativar/desativar estação");
             System.out.println("0 - Sair");
             opcao = this.lerInteiro("Escolha uma opção: ");
@@ -74,6 +76,10 @@ public class SistemaMonitoramento {
                 this.gerenciarDados();
             } else if (opcao == 4) {
                 this.simularLeituras();
+            } else if (opcao == 5) {
+                this.exibirStatus();
+            } else if (opcao == 6) {
+                this.simular24Horas();
             } else if (opcao == 7) {
                 this.alternarEstacao();
             } else if (opcao != 0) {
@@ -252,6 +258,74 @@ public class SistemaMonitoramento {
             System.out.println("Leitura " + i + ": " + this.descreverUltimasLeituras(this.estacao));
         }
         this.rodarPrevisoes();
+    }
+
+    private void exibirStatus() {
+        System.out.println("\nSTATUS COMPLETO: ");
+        this.dados.exibirDados();
+
+        System.out.println("\n" + this.estacao.verificarStatus());
+        if (this.clima.isTempestade()) {
+            System.out.println("Tempo simulado: tempestade");
+        } else {
+            System.out.println("Tempo simulado: normal");
+        }
+
+        System.out.println("\nSensores:");
+        for (Sensor sensor : this.estacao.getSensores()) {
+            System.out.println("  " + sensor.getTipo() + " - leituras guardadas: " + sensor.getLeituras().size());
+        }
+        System.out.println("  Última rodada: " + this.descreverUltimasLeituras(this.estacao));
+
+        System.out.println("\nEstratégias de previsão:");
+        for (EstrategiaPrevisao estrategia : this.estrategias) {
+            System.out.println("  " + estrategia.getNome() + ": " + estrategia.getDescricao()
+                    + " (precisa de " + estrategia.getMinimoLeituras() + " leituras)");
+        }
+    }
+
+    private void simular24Horas() {
+        System.out.println("\nSIMULAÇÃO DE 24 HORAS: ");
+        System.out.println("Tempo normal até 9h, tempestade das 9h às 17h, depois melhora.");
+
+        ClimaSimulado climaDoDia = new ClimaSimulado();
+        EstacaoDeColeta estacaoDoDia = this.criarEstacao(climaDoDia);
+        estacaoDoDia.ativar();
+
+        for (int hora = 0; hora < 24; hora++) {
+            if (hora == 9) {
+                climaDoDia.setTempestade(true);
+            }
+            if (hora == 17) {
+                climaDoDia.setTempestade(false);
+            }
+            estacaoDoDia.coletarLeituras();
+
+            int piorNivel = -1;
+            String detalhe = "";
+            for (Sensor sensor : estacaoDoDia.getSensores()) {
+                for (EstrategiaPrevisao estrategia : this.estrategias) {
+                    double previsto = this.calcularPrevisao(sensor, estrategia);
+                    if (previsto != EstrategiaPrevisao.SEM_PREVISAO) {
+                        int nivel = this.calcularNivel(previsto, sensor.getLimiteAlerta());
+                        if (nivel > piorNivel) {
+                            piorNivel = nivel;
+                            detalhe = String.format("%s previsto %.1f %s (%s)",
+                                    sensor.getTipo(), previsto, sensor.getUnidade(), estrategia.getNome());
+                        }
+                    }
+                }
+            }
+
+            String situacao = "sem previsão (poucas leituras)";
+            if (piorNivel >= 0) {
+                situacao = NOMES_NIVEL[piorNivel];
+                if (piorNivel > NORMAL) {
+                    situacao = situacao + " - " + detalhe;
+                }
+            }
+            System.out.println(String.format("%02dh | %s | %s", hora, this.descreverUltimasLeituras(estacaoDoDia), situacao));
+        }
     }
 
     private void alternarEstacao() {
